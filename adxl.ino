@@ -1,19 +1,25 @@
 #include <Wire.h>
 #include <SPI.h>
-#include <SD.h>
+#include <SD.h>  
 #include <Adafruit_Sensor.h>
 #include <Adafruit_ADXL345_U.h>
 
 // ------------------------------
-// CONFIG SD (ESP32)
+// I2C Pinos ESP8266
 // ------------------------------
-#define SD_CS   5
-#define SD_MOSI 23
-#define SD_MISO 19
-#define SD_SCK  18
+#define I2C_SDA D2
+#define I2C_SCL D1
 
-File dataFile;
-char filename[64];
+// ------------------------------
+// CONFIG SD (ESP8266 - SPI FIXO)
+// ------------------------------
+//#define SD_SCK   D5      // --- SD ---
+//#define SD_MISO  D6      // --- SD ---
+//#define SD_MOSI  D7      // --- SD ---
+//#define SD_CS    D8      // --- SD ---
+
+//File dataFile;           // --- SD ---
+//char filename[48];       // --- SD ---
 
 // ------------------------------
 // VARIÁVEIS ADXL / FREQUÊNCIA
@@ -25,12 +31,16 @@ float currentFrequency = 0;
 Adafruit_ADXL345_Unified accel = Adafruit_ADXL345_Unified(12345);
 uint8_t adxlAddress = 0;
 
+// ------------------------------
+// BUFFER DE ESCRITA (512 bytes)
+// ------------------------------
+//String sdBuffer = "";          // --- SD ---
+//const int BUFFER_LIMIT = 512;  // --- SD ---
+
 // -------------------------------------------------------------------
-// FUNÇÃO: SCAN I2C E DETECTAR ADXL345 PELO DEVID (0xE5)
+// DETECTAR ADXL345
 // -------------------------------------------------------------------
 bool detectADXL345() {
-  Serial.println("🔍 Varredura I2C para detectar ADXL345...");
-
   for (uint8_t addr = 1; addr < 127; addr++) {
     Wire.beginTransmission(addr);
     if (Wire.endTransmission() == 0) {
@@ -40,84 +50,79 @@ bool detectADXL345() {
       Wire.endTransmission();
 
       Wire.requestFrom(addr, (uint8_t)1);
-      if (Wire.available()) {
-        uint8_t devid = Wire.read();
-
-        if (devid == 0xE5) {       
-          Serial.printf("✔ ADXL345 encontrado no endereço 0x%02X\n", addr);
-          adxlAddress = addr;
-          return true;
-        }
+      if (Wire.available() && Wire.read() == 0xE5) {
+        adxlAddress = addr;
+        return true;
       }
     }
   }
-
-  Serial.println(" Nenhum ADXL345 encontrado no I2C!");
   return false;
 }
 
 // -------------------------------------------------------------------
-// SD 
+// INICIALIZAR SD (COMENTADO)
 // -------------------------------------------------------------------
+/*
 bool initSDcard() {
-  Serial.println("Inicializando SD...");
+  SPI.begin();   // ESP8266 usa pinos SPI fixos
 
-  SPI.begin(SD_SCK, SD_MISO, SD_MOSI, SD_CS);
-
-  if (!SD.begin(SD_CS)) {
-    Serial.println(" Falha ao iniciar cartão SD!");
-    return false;
-  }
+  if (!SD.begin(SD_CS)) return false;
 
   unsigned long long t_us = micros();
   sprintf(filename, "/log_%llu.csv", t_us);
 
   dataFile = SD.open(filename, FILE_WRITE);
-
-  if (!dataFile) {
-    Serial.println(" ERRO ao criar arquivo!");
-    return false;
-  }
-
-  Serial.print(" Arquivo criado: ");
-  Serial.println(filename);
+  if (!dataFile) return false;
 
   dataFile.println("Timestamp(us);Ax;Ay;Az;Freq(Hz)");
   dataFile.flush();
 
   return true;
 }
+*/
 
 // -------------------------------------------------------------------
 // SETUP
 // -------------------------------------------------------------------
 void setup() {
-  Serial.begin(921600);
-  Wire.begin();
-  Wire.setClock(400000);
+  Serial.begin(115200);
 
-  // Detectar ADXL345
-  if (!detectADXL345()) while (1) delay(1000);
+  Wire.begin(I2C_SDA, I2C_SCL);
+  Wire.setClock(400000);  // I2C rápido
 
-  // Inicializar ADXL345
-  if (!accel.begin(adxlAddress)) {
-    Serial.println(" Falha ao iniciar ADXL345!");
-    while (1) delay(1000);
+  Serial.println("Iniciando detecção do ADXL345...");
+
+  if (!detectADXL345()) {
+    Serial.println("ADXL345 não encontrado!");
+    while (1) yield();
   }
 
-  Serial.printf("✔ ADXL345 iniciado em 0x%02X\n", adxlAddress);
+  Serial.print("✔ ADXL345 encontrado no endereço: 0x");
+  Serial.println(adxlAddress, HEX);
+
+  if (!accel.begin(adxlAddress)) {
+    Serial.println("Falha ao iniciar ADXL345!");
+    while (1) yield();
+  }
+
+  Serial.println("✔ ADXL345 inicializado!");
 
   accel.setRange(ADXL345_RANGE_16_G);
-  accel.setDataRate(ADXL345_DATARATE_3200_HZ);
+  accel.setDataRate(ADXL345_DATARATE_1600_HZ);
 
-  // Iniciar SD
-  if (!initSDcard()) while (1) delay(1000);
+  // --- SD ---
+  /*
+  if (!initSDcard()) {
+    Serial.println("Falha ao iniciar SD!");
+    while (1) yield();
+  }
+  */
 
   lastTimeCheck = millis();
 }
 
 // -------------------------------------------------------------------
-// LOOP PRINCIPAL
+// LOOP PRINCIPAL (COM SD COMENTADO)
 // -------------------------------------------------------------------
 void loop() {
   readingCount++;
@@ -125,30 +130,47 @@ void loop() {
   sensors_event_t event;
   accel.getEvent(&event);
 
-  // Atualiza freq (Hz)
+  // Atualiza frequência real medida
   if (millis() - lastTimeCheck >= 1000) {
     currentFrequency = readingCount;
     readingCount = 0;
     lastTimeCheck = millis();
   }
 
-  // -------------------------
-  // SALVAR NO SD
-  // -------------------------
-  if (dataFile) {
-    dataFile.print(micros());               dataFile.print(";");
-    dataFile.print(event.acceleration.x);   dataFile.print(";");
-    dataFile.print(event.acceleration.y);   dataFile.print(";");
-    dataFile.print(event.acceleration.z);   dataFile.print(";");
-    dataFile.println(currentFrequency);
+  // PRINT SERIAL PARA TESTE (ADXL FUNCIONANDO)
+  Serial.print(micros()); Serial.print("; ");
+  Serial.print(event.acceleration.x, 3); Serial.print("; ");
+  Serial.print(event.acceleration.y, 3); Serial.print("; ");
+  Serial.print(event.acceleration.z, 3); Serial.print("; ");
+  Serial.println(currentFrequency, 1);
+
+  // --- SD ---  (comentado)
+  /*
+  String line =
+    String(micros()) + ";" +
+    String(event.acceleration.x, 3) + ";" +
+    String(event.acceleration.y, 3) + ";" +
+    String(event.acceleration.z, 3) + ";" +
+    String(currentFrequency, 1) + "\n";
+
+  sdBuffer += line;
+
+  if (sdBuffer.length() >= BUFFER_LIMIT) {
+    dataFile.print(sdBuffer);
     dataFile.flush();
+    sdBuffer = "";
   }
 
-  // -------------------------
-  // PRINT SERIAL (debug)
-  // -------------------------
-  Serial.print(event.acceleration.x); Serial.print(" ");
-  Serial.print(event.acceleration.y); Serial.print(" ");
-  Serial.print(event.acceleration.z); Serial.print(" ");
-  Serial.println(currentFrequency);
+  static uint32_t lastFlush = 0;
+  if (millis() - lastFlush >= 200) {
+    if (sdBuffer.length() > 0) {
+      dataFile.print(sdBuffer);
+      dataFile.flush();
+      sdBuffer = "";
+    }
+    lastFlush = millis();
+  }
+  */
+
+  yield(); // evita reset por watchdog
 }
