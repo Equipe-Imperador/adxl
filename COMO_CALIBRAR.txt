@@ -1,3 +1,16 @@
-1. Coleta dos dados de "Zero"Coloque o Baja em uma superfície o mais plana e nivelada possível. Peça para o piloto sentar ou simule o peso dele. Com o carro parado, rode um código que apenas imprima a média das acelerações $x, y, z$ de cada sensor por alguns segundos.Você vai notar que, mesmo parado, os valores não serão $0$. O eixo $Z$ deve marcar algo perto de $9.81$ (gravidade) e os eixos $X$ e $Y$ deveriam ser $0$, mas terão pequenos desvios.2. O que você vai alterar no códigoNo seu código atual, você tem isso:C++const float b1D[3] = {0.094440, -0.361731, 0.911032};
+1. Coleta dos dados de "Zero"Coloque o Baja em uma superfície o mais plana e nivelada possível. Peça para o piloto sentar ou simule o peso dele. Com o carro parado, rode um código que apenas imprima a média das acelerações $x, y, z$ de cada sensor por alguns segundos.
+Você vai notar que, mesmo parado, os valores não serão $0$.
+O eixo $Z$ deve marcar algo perto de $9.81$ (gravidade) e os eixos $X$ e $Y$ deveriam ser $0$, mas terão pequenos desvios.
+
+2. O que você vai alterar no códigoNo seu código atual, você tem isso:C++const float b1D[3] = {0.094440, -0.361731, 0.911032};
 const float b53[3] = {0.931123, -0.218200, 0.350909};
-Você vai substituir esses valores pelos novos valores médios que você coletou com o carro parado:$b[0]$: Média do X parado.$b[1]$: Média do Y parado.$b[2]$: Média do Z parado MENOS $9.81$ (porque você quer descontar a gravidade para que o gráfico mostre $0g$ em repouso).3. Atenção ao Alinhamento (O perigo real)Se você instalou o sensor na manga de eixo "de lado" ou "de cabeça para baixo" em relação ao sensor do subframe, os sinais não vão bater.Verificação: Se você empurrar a frente do carro para baixo, o $Z$ dos dois sensores deve aumentar (ou diminuir) juntos.Correção: Se um subir e o outro descer, você terá que inverter o sinal no código:p.z1 = -(Ainv1D[2][0]*f1x + ...)
+Você vai substituir esses valores pelos novos valores médios que você coletou com o carro parado:$b[0]$:
+Média do X parado.$b[1]$: 
+Média do Y parado.$b[2]$: 
+Média do Z parado MENOS $9.81$ (porque você quer descontar a gravidade para que o gráfico mostre $0g$ em repouso).
+
+3. Atenção ao Alinhamento (O perigo real)Se você instalou o sensor na manga de eixo "de lado" ou "de cabeça para baixo" em relação ao sensor do subframe, os sinais não vão bater.
+
+Verificação: Se você empurrar a frente do carro para baixo, o $Z$ dos dois sensores deve aumentar (ou diminuir) juntos.
+
+Correção: Se um subir e o outro descer, você terá que inverter o sinal no código:p.z1 = -(Ainv1D[2][0]*f1x + ...)
